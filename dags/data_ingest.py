@@ -36,10 +36,6 @@ with DAG(
     end = EmptyOperator(task_id="end")
 
     @task
-    def foo(params) -> dict[str, str]:
-        return dict(RequestFormModel(**params))
-
-    @task
     def validate_request(params) -> None:
         # Is the shape of the request correct?
         # Does the submitter and recipient have permissions to the project?
