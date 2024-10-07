@@ -22,4 +22,7 @@ cat standalone_admin_password.txt
 # Set environment variables in .rc
 export AIRFLOW_HOME=~/path/to/rdm-airflow
 export AIRFLOW_VERSION=2.10.2
+
+# Create .env with UID
+AIRFLOW_UID=<uid>
 ```
