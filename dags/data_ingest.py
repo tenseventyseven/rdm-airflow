@@ -110,7 +110,7 @@ with DAG(
 
     @task
     def create_dataset_folder(dataset_id: str) -> str:
-        dataset_folder = f"{DEST_BASE_PATH}/{dataset_id}"
+        dataset_folder = f"{DEST_BASE_PATH}/Datasets/{dataset_id}"
 
         if os.path.exists(dataset_folder):
             raise FileExistsError(f"The directory {dataset_folder} already exists.")
@@ -170,8 +170,8 @@ with DAG(
         project_datasets = project_datasets_adapter.validate_python(response.json())
 
         for dataset in project_datasets.datasetIds:
-            source_path = os.path.join(DEST_BASE_PATH, dataset)
-            target_path = os.path.join(DEST_BASE_PATH, project_id, dataset)
+            source_path = os.path.join(DEST_BASE_PATH, "Datasets", dataset)
+            target_path = os.path.join(DEST_BASE_PATH, "Projects", project_id, dataset)
         
             # Print out what you're about to do for debugging
             print(f"Creating soft link from {source_path} to {target_path}")
