@@ -1,7 +1,7 @@
 import httpx
 from pydantic import TypeAdapter
 
-from dags.include.models import Dataset, DatasetUsers, Project, ProjectDatasets
+from include.models import Dataset, DatasetUsers, Project, ProjectDatasets
 
 RDM_API_BASE_URL = "http://atest01.hpc.wehi.edu.au:3001/api"
 

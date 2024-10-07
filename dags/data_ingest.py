@@ -8,7 +8,7 @@ import os
 import uuid
 import subprocess
 
-from dags.include.helpers import get_dataset_users, get_project, get_project_datasets, make_dataset
+from include.helpers import get_dataset_users, get_project, get_project_datasets, make_dataset
 from include.models import RequestFormModel
 
 SRC_BASE_PATH = "/mnt/shared"
