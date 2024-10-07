@@ -179,3 +179,4 @@ pyrightconfig.json
 standalone_admin_password.txt
 airflow-webserver.pid
 airflow.db
+airflow.cfg

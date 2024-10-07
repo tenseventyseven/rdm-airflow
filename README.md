@@ -25,4 +25,11 @@ export AIRFLOW_VERSION=2.10.2
 
 # Create .env with UID
 AIRFLOW_UID=<uid>
+
+# Update settings in generated airflow.cfg
+load_examples = False
+auth_backends = airflow.providers.fab.auth_manager.api.auth.backend.basic_auth
+access_control_allow_headers = *
+access_control_allow_methods = *
+access_control_allow_origins = *
 ```
