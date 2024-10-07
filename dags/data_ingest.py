@@ -4,15 +4,13 @@ from airflow.decorators import task
 from airflow.exceptions import AirflowFailException
 
 import pendulum
-import httpx
-from pydantic import TypeAdapter
 import os
 import uuid
 import subprocess
 
-from include.models import DatasetUsers, ProjectDatasets, RequestFormModel, Project, Dataset
+from dags.include.helpers import get_dataset_users, get_project, get_project_datasets, make_dataset
+from include.models import RequestFormModel
 
-RDM_API_BASE_URL = "http://atest01.hpc.wehi.edu.au:3001/api"
 SRC_BASE_PATH = "/mnt/shared"
 DEST_BASE_PATH = "/vast/projects/ResearchDataManagement"
 
@@ -37,45 +35,27 @@ with DAG(
 
     @task
     def validate_request(params) -> None:
-        # Is the shape of the request correct?
-        # Does the submitter and recipient have permissions to the project?
-        # Does the source folder exist and is non-empty?
 
-        # Parse and validate params using the Pydantic model
+        # Is the shape of the request correct?
         request = RequestFormModel(**params)
         submitter = request.submitter
         recipient = request.recipient
-        projectId = request.projectId
-        srcFolder = request.srcFolder
+        project_id = request.projectId
+        src_folder = request.srcFolder
 
-        # Validate submitter and recipient for project
-        URL = f"{RDM_API_BASE_URL}/projects/{projectId}/users"
-        response = httpx.get(URL)
-        response.raise_for_status()
-
-        project_adapter = TypeAdapter(Project)
-        project = project_adapter.validate_python(response.json())
-
-        if submitter not in project.userIds:
+        # Does the submitter and recipient have permissions to the project?
+        project = get_project(project_id)
+        if submitter not in project.userIds or recipient not in project.userIds:
             raise AirflowFailException(
-                f"Submitter {submitter} missing permissions to {projectId}"
+                f"Submitter and/or recipient missing permissions to {project_id}"
             )
         else:
-            print(f"Submitter {submitter} has correct permissions")
+            print(f"Submitter abd recipient have correct permissions")
 
-        if recipient not in project.userIds:
-            raise AirflowFailException(
-                f"Recipient {recipient} missing permissions to {projectId}"
-            )
-        else:
-            print(f"Recipient {recipient} has correct permissions")
-
-        # Check if the directory exists
-        dir_path = f"/mnt/shared/{srcFolder}"
+        # Does the source folder exist and is non-empty?
+        dir_path = f"/mnt/shared/{src_folder}"
         if not os.path.isdir(dir_path):
             raise AirflowFailException(f"{dir_path} does not exist or is not a directory.")
-
-        # Check if the directory is readable
         if os.access(dir_path, os.R_OK):
             print(f"{dir_path} exists and is readable.")
         else:
@@ -83,29 +63,18 @@ with DAG(
 
     @task
     def create_dataset(params) -> str:
-        project_id = params["projectId"]
-
         # TODO: get this value from data portal API..
         dataset_id = str(uuid.uuid4())
 
-        payload = {"datasetId": dataset_id, "projectId": project_id}
-
-        URL = f"{RDM_API_BASE_URL}/datasets"
-        response = httpx.post(URL, json=payload)
-        response.raise_for_status()
-
-        dataset_adapter = TypeAdapter(Dataset)
-        dataset = dataset_adapter.validate_python(response.json())
-
+        dataset = make_dataset(params["projectId"], dataset_id)
         if not dataset.datasetId == dataset_id:
             raise AirflowFailException(f"Dataset creation failed")
 
-        return dataset.datasetId
+        return dataset_id
 
     @task
     def create_dataset_folder(dataset_id: str) -> str:
         dataset_folder = f"{DEST_BASE_PATH}/Datasets/{dataset_id}"
-
         if os.path.exists(dataset_folder):
             raise FileExistsError(f"The directory {dataset_folder} already exists.")
         else:
@@ -127,24 +96,14 @@ with DAG(
 
     @task
     def apply_dataset_access_controls(dataset_id: str, dataset_folder: str) -> None:
-        # Get user IDs for dataset
-        URL = f"{RDM_API_BASE_URL}/datasets/{dataset_id}/users"
-        response = httpx.get(URL)
-        response.raise_for_status()
-
-        dataset_users_adapter = TypeAdapter(DatasetUsers)
-        dataset_users = dataset_users_adapter.validate_python(response.json())
-
+        dataset_users = get_dataset_users(dataset_id)
         for user in dataset_users.userIds:
-            # TODO: skip when userId == process owner
-
             # Construct the setfacl command
             setfacl_command = f'setfacl -Rm u:{user}:rwX,d:u:{user}:rwX {dataset_folder}'
             
             try:
                 # Use subprocess to execute the setfacl command
-                result = subprocess.run(setfacl_command, shell=True, check=True, text=True, capture_output=True)
-                
+                subprocess.run(setfacl_command, shell=True, check=True, text=True, capture_output=True)
                 print(f"Permissions applied for {user}")
             except subprocess.CalledProcessError as e:
                 # Handle the case where the command fails
@@ -154,22 +113,11 @@ with DAG(
     @task
     def create_project_links(params) -> None:
         project_id = params["projectId"]
-
-        # Get user IDs for dataset
-        URL = f"{RDM_API_BASE_URL}/projects/{project_id}/datasets"
-        response = httpx.get(URL)
-        response.raise_for_status()
-
-        project_datasets_adapter = TypeAdapter(ProjectDatasets)
-        project_datasets = project_datasets_adapter.validate_python(response.json())
-
+        project_datasets = get_project_datasets(params["projectId"])
         for dataset in project_datasets.datasetIds:
             source_path = os.path.join(DEST_BASE_PATH, "Datasets", dataset)
             target_path = os.path.join(DEST_BASE_PATH, "Projects", project_id, dataset)
         
-            # Print out what you're about to do for debugging
-            print(f"Creating soft link from {source_path} to {target_path}")
-            
             try:
                 # Create directories if they don't exist
                 os.makedirs(os.path.dirname(target_path), exist_ok=True)
