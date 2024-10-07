@@ -48,7 +48,7 @@ with DAG(
         projectId = request.projectId
         srcFolder = request.srcFolder
 
-        # Validate submitter for project
+        # Validate submitter and recipient for project
         URL = f"{RDM_API_BASE_URL}/projects/{projectId}/users"
         response = httpx.get(URL)
         response.raise_for_status()
@@ -89,8 +89,6 @@ with DAG(
         dataset_id = str(uuid.uuid4())
 
         payload = {"datasetId": dataset_id, "projectId": project_id}
-
-        print(payload)
 
         URL = f"{RDM_API_BASE_URL}/datasets"
         response = httpx.post(URL, json=payload)
