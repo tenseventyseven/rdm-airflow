@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 
 
 class RequestFormModel(BaseModel):
@@ -33,3 +33,8 @@ class DatasetUsers(BaseModel):
     id: int
     datasetId: str
     userIds: list[str]
+
+
+class UserModel(BaseModel):
+    name: str
+    email: EmailStr

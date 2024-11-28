@@ -33,6 +33,8 @@ auth_backends = airflow.providers.fab.auth_manager.api.auth.backend.basic_auth
 access_control_allow_headers = *
 access_control_allow_methods = *
 access_control_allow_origins = *
+# ...to support Pydantic *Model deserialisation
+allowed_deserialization_classes_regexp = .*Model
 
 # Restart airflow to pip up config changes
 ```

@@ -1,6 +1,5 @@
-from airflow.models.dag import DAG
 from airflow.operators.empty import EmptyOperator
-from airflow.decorators import task
+from airflow.decorators import dag, task
 from airflow.exceptions import AirflowFailException
 
 import pendulum
@@ -8,34 +7,31 @@ import os
 import uuid
 import subprocess
 
-from include.helpers import get_dataset_users, get_project, get_project_datasets, make_dataset
+from include.helpers import (
+    get_dataset_users,
+    get_project,
+    get_project_datasets,
+    make_dataset,
+)
 from include.models import RequestFormModel
 
 SRC_BASE_PATH = "/mnt/shared"
 DEST_BASE_PATH = "/vast/projects/ResearchDataManagement"
 
-with DAG(
-    dag_id="data_ingest",
-    default_args={
-        "owner": "airflow",
-        # "email": ["alerts@example.com"],
-        # "email_on_failure": True,
-        # "email_on_retry": False,
-        # "retries": 0,
-        # "retry_delay": pendulum.duration(minutes=5),
-    },
+
+@dag(
     schedule=None,
     start_date=pendulum.datetime(2024, 1, 1, tz="UTC"),
     catchup=False,
     tags=["example"],
-) as dag:
+)
+def data_ingest():
     start = EmptyOperator(task_id="start")
 
     end = EmptyOperator(task_id="end")
 
     @task
     def validate_request(params) -> None:
-
         # Is the shape of the request correct?
         request = RequestFormModel(**params)
         submitter = request.submitter
@@ -50,12 +46,14 @@ with DAG(
                 f"Submitter and/or recipient missing permissions to {project_id}"
             )
         else:
-            print(f"Submitter abd recipient have correct permissions")
+            print("Submitter abd recipient have correct permissions")
 
         # Does the source folder exist and is non-empty?
         dir_path = f"/mnt/shared/{src_folder}"
         if not os.path.isdir(dir_path):
-            raise AirflowFailException(f"{dir_path} does not exist or is not a directory.")
+            raise AirflowFailException(
+                f"{dir_path} does not exist or is not a directory."
+            )
         if os.access(dir_path, os.R_OK):
             print(f"{dir_path} exists and is readable.")
         else:
@@ -68,7 +66,7 @@ with DAG(
 
         dataset = make_dataset(params["projectId"], dataset_id)
         if not dataset.datasetId == dataset_id:
-            raise AirflowFailException(f"Dataset creation failed")
+            raise AirflowFailException("Dataset creation failed")
 
         return dataset_id
 
@@ -92,18 +90,26 @@ with DAG(
     @task.bash
     def perform_dataset_copy(dest_path: str, params) -> None:
         src_path = f"{SRC_BASE_PATH}/{params["srcFolder"]}"
-        return f"rsync -avzP --partial --ignore-existing {src_path} {dest_path}"
+        return f"rsync -avhzP --progress --partial --inplace --ignore-existing {src_path} {dest_path}"
 
     @task
     def apply_dataset_access_controls(dataset_id: str, dataset_folder: str) -> None:
         dataset_users = get_dataset_users(dataset_id)
         for user in dataset_users.userIds:
             # Construct the setfacl command
-            setfacl_command = f'setfacl -Rm u:{user}:rwX,d:u:{user}:rwX {dataset_folder}'
-            
+            setfacl_command = (
+                f"setfacl -Rm u:{user}:rwX,d:u:{user}:rwX {dataset_folder}"
+            )
+
             try:
                 # Use subprocess to execute the setfacl command
-                subprocess.run(setfacl_command, shell=True, check=True, text=True, capture_output=True)
+                subprocess.run(
+                    setfacl_command,
+                    shell=True,
+                    check=True,
+                    text=True,
+                    capture_output=True,
+                )
                 print(f"Permissions applied for {user}")
             except subprocess.CalledProcessError as e:
                 # Handle the case where the command fails
@@ -117,14 +123,14 @@ with DAG(
         for dataset in project_datasets.datasetIds:
             source_path = os.path.join(DEST_BASE_PATH, "Datasets", dataset)
             target_path = os.path.join(DEST_BASE_PATH, "Projects", project_id, dataset)
-        
+
             try:
                 # Create directories if they don't exist
                 os.makedirs(os.path.dirname(target_path), exist_ok=True)
-                
+
                 # Create the symlink
                 os.symlink(source_path, target_path)
-                
+
                 print(f"Soft link created for {dataset}")
             except FileExistsError:
                 print(f"Soft link for {dataset} already exists")
@@ -132,18 +138,23 @@ with DAG(
                 print(f"Failed to create soft link for {dataset}: {str(e)}")
                 raise  # Reraise
 
-    # Setup tasks
+    # Define workflow
     dataset_id = create_dataset()
     dataset_folder = create_dataset_folder(dataset_id)
 
-    # Define workflow
     (
         start
         >> validate_request()
         >> dataset_id
         >> dataset_folder
-        >> [write_request_form_metadata(dataset_folder), perform_dataset_copy(dataset_folder)]
+        >> [
+            write_request_form_metadata(dataset_folder),
+            perform_dataset_copy(dataset_folder),
+        ]
         >> apply_dataset_access_controls(dataset_id, dataset_folder)
         >> create_project_links()
         >> end
     )
+
+
+data_ingest()
