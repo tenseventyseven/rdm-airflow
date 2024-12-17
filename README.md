@@ -16,7 +16,7 @@ pip install -r requirements.txt
 
 # Set environment variables in .rc
 export AIRFLOW_HOME=~/path/to/rdm-airflow
-export AIRFLOW_VERSION=2.10.3
+export AIRFLOW_VERSION=2.10.4
 
 # Create .env with UID
 AIRFLOW_UID=<uid>
@@ -30,6 +30,8 @@ cat standalone_admin_password.txt
 # Update settings in generated airflow.cfg
 load_examples = False
 auth_backends = airflow.providers.fab.auth_manager.api.auth.backend.basic_auth
+expose_config = True
+# ...CORS
 access_control_allow_headers = *
 access_control_allow_methods = *
 access_control_allow_origins = *
@@ -37,4 +39,12 @@ access_control_allow_origins = *
 allowed_deserialization_classes_regexp = .*Model
 
 # Restart airflow to pip up config changes
+```
+
+## Local setup with containers
+
+```sh
+# Bring up services
+podman compose -f docker-compose-services.yaml up
+
 ```
